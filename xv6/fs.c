@@ -371,85 +371,114 @@ iunlockput(struct inode *ip)
 // Return the disk block address of the nth block in inode ip.
 // If there is no such block, bmap allocates one.
 // static uint
-// bmap(struct inode *ip, uint bn)
-// {
-//   uint addr, *a;
-//   struct buf *bp;
-
-//   if(bn < NDIRECT){
-//     if((addr = ip->addrs[bn]) == 0)
-//       ip->addrs[bn] = addr = balloc(ip->dev);
-//     return addr;
-//   }
-//   bn -= NDIRECT;
-
-//   if(bn < NINDIRECT){
-//     // Load indirect block, allocating if necessary.
-//     if((addr = ip->addrs[NDIRECT]) == 0)
-//       ip->addrs[NDIRECT] = addr = balloc(ip->dev);
-//     bp = bread(ip->dev, addr);
-//     a = (uint*)bp->data;
-//     if((addr = a[bn]) == 0){
-//       a[bn] = addr = balloc(ip->dev);
-//       log_write(bp);
-//     }
-//     brelse(bp);
-//     return addr;
-//   }
-//   bn -= NINDIRECT;
-//   panic("bmap: out of range");
-// }
-
-
-
 static uint
 bmap(struct inode *ip, uint bn)
 {
-  uint addr;
+  uint addr, *a, *b;
   struct buf *bp;
+  struct buf *bp2;
   if(bn < NDIRECT){
-    if((addr = ip->addrs[bn]) == 0){
+    if((addr = ip->addrs[bn]) == 0)
       ip->addrs[bn] = addr = balloc(ip->dev);
-    }  
     return addr;
-  }else{
-    if(bn < NDIRECT + NINDIRECT*NINDIRECT_ADDR){
-      uint l0_index_offset = (bn - NDIRECT)/NINDIRECT;
-      if((addr = ip->addrs[l0_index_offset + NDIRECT]) == 0){
-        ip->addrs[l0_index_offset + NDIRECT] = addr = balloc(ip->dev);
-      }
-      bp =  bread(ip->dev, addr);
-      uint* l1_base_addr = (uint*)bp->data;
-      if((addr = l1_base_addr[bn - NDIRECT - l0_index_offset*NINDIRECT]) == 0){
-        l1_base_addr[bn - NDIRECT - l0_index_offset*NINDIRECT] = addr = balloc(ip->dev);
+  }
+  bn -= NDIRECT;
+
+  if(bn < NINDIRECT){
+    // Load indirect block, allocating if necessary.
+    if((addr = ip->addrs[NDIRECT]) == 0)
+      ip->addrs[NDIRECT] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+    if((addr = a[bn]) == 0){
+      a[bn] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+    return addr;
+  }
+  bn -= NINDIRECT;
+  //modified by jxp220032
+  if(bn < NDOUBLEINDIRECT){
+    // Load indirect block at first level, allocating if necessary
+    if ((addr = ip->addrs[NDIRECT + 1]) == 0){
+      ip->addrs[NDIRECT + 1] = addr = balloc(ip->dev);
+    } 
+    if (addr != 0) {
+      // if this is not reached balloc(ip->dev) must have failed.
+      bp = bread(ip->dev, addr);
+      a = (uint *)bp->data;
+      if ((addr = a[bn / NINDIRECT]) == 0) {
+        a[bn / NINDIRECT] = addr = balloc(ip->dev);
         log_write(bp);
       }
       brelse(bp);
-      return addr;
-    }else{
-      if(bn  < NDIRECT + NINDIRECT*NINDIRECT_ADDR + NDOUBLEINDIRECT*NDOUBLEINDIRECT_ADDR){
-         uint l0_index_offset = (bn - NDIRECT - NINDIRECT*NINDIRECT_ADDR)/NDOUBLEINDIRECT;
-         uint l1_base_addrs;
-         if((l1_base_addrs = ip->addrs[l0_index_offset + NDIRECT + NINDIRECT_ADDR]) == 0){
-          ip->addrs[l0_index_offset + NDIRECT + NINDIRECT_ADDR] = l1_base_addrs = balloc(ip->dev);
-          bp = bread(ip->dev,l1_base_addrs);
-          log_write(bp);
-          brelse(bp);
-         }
-         uint l1_index_offset = (bn - NDIRECT - NINDIRECT*NINDIRECT_ADDR - NDOUBLEINDIRECT*l0_index_offset)/NINDIRECT;
-         bp = bread(ip->dev, l1_base_addrs + l1_index_offset);
-         uint* l2_base_addr = (uint*)bp->data;
-         if((addr = l2_base_addr[bn -  NDIRECT - NINDIRECT*NINDIRECT_ADDR - NDOUBLEINDIRECT*l0_index_offset - NINDIRECT*l1_index_offset])== 0){
-          l2_base_addr[bn -  NDIRECT - NINDIRECT*NINDIRECT_ADDR - NDOUBLEINDIRECT*l0_index_offset - NINDIRECT*l1_index_offset] = addr = balloc(ip->dev);
-          log_write(bp);
-         }
-         brelse(bp);
-         return addr;
+      // Check if the address is zero before reading the second-level block
+      if (addr != 0) {
+        //if this is not reached balloc(ip->dev) must have failed.
+        bp2 = bread(ip->dev, addr);
+        b = (uint *)bp2->data;
+        if ((addr = b[bn % NINDIRECT]) == 0) {
+          b[bn % NINDIRECT] = addr = balloc(ip->dev);
+          log_write(bp2);
+        }
+        brelse(bp2);
+        return addr;
       }
     }
   }
   panic("bmap: out of range");
 }
+
+
+// static uint
+// bmap(struct inode *ip, uint bn)
+// {
+//   uint addr;
+//   struct buf *bp;
+//   if(bn < NDIRECT){
+//     if((addr = ip->addrs[bn]) == 0){
+//       ip->addrs[bn] = addr = balloc(ip->dev);
+//     }  
+//     return addr;
+//   }else{
+//     if(bn < NDIRECT + NINDIRECT*NINDIRECT_ADDR){
+//       uint l0_index_offset = (bn - NDIRECT)/NINDIRECT;
+//       if((addr = ip->addrs[l0_index_offset + NDIRECT]) == 0){
+//         ip->addrs[l0_index_offset + NDIRECT] = addr = balloc(ip->dev);
+//       }
+//       bp =  bread(ip->dev, addr);
+//       uint* l1_base_addr = (uint*)bp->data;
+//       if((addr = l1_base_addr[bn - NDIRECT - l0_index_offset*NINDIRECT]) == 0){
+//         l1_base_addr[bn - NDIRECT - l0_index_offset*NINDIRECT] = addr = balloc(ip->dev);
+//         log_write(bp);
+//       }
+//       brelse(bp);
+//       return addr;
+//     }else{
+//       if(bn  < NDIRECT + NINDIRECT*NINDIRECT_ADDR + NDOUBLEINDIRECT*NDOUBLEINDIRECT_ADDR){
+//          uint l0_index_offset = (bn - NDIRECT - NINDIRECT*NINDIRECT_ADDR)/NDOUBLEINDIRECT;
+//          uint l1_base_addrs;
+//          if((l1_base_addrs = ip->addrs[l0_index_offset + NDIRECT + NINDIRECT_ADDR]) == 0){
+//           ip->addrs[l0_index_offset + NDIRECT + NINDIRECT_ADDR] = l1_base_addrs = balloc(ip->dev);
+//           bp = bread(ip->dev,l1_base_addrs);
+//           log_write(bp);
+//           brelse(bp);
+//          }
+//          uint l1_index_offset = (bn - NDIRECT - NINDIRECT*NINDIRECT_ADDR - NDOUBLEINDIRECT*l0_index_offset)/NINDIRECT;
+//          bp = bread(ip->dev, l1_base_addrs + l1_index_offset);
+//          uint* l2_base_addr = (uint*)bp->data;
+//          if((addr = l2_base_addr[bn -  NDIRECT - NINDIRECT*NINDIRECT_ADDR - NDOUBLEINDIRECT*l0_index_offset - NINDIRECT*l1_index_offset])== 0){
+//           l2_base_addr[bn -  NDIRECT - NINDIRECT*NINDIRECT_ADDR - NDOUBLEINDIRECT*l0_index_offset - NINDIRECT*l1_index_offset] = addr = balloc(ip->dev);
+//           log_write(bp);
+//          }
+//          brelse(bp);
+//          return addr;
+//       }
+//     }
+//   }
+//   panic("bmap: out of range");
+// }
 
 // Truncate inode (discard contents).
 // Only called when the inode has no links
