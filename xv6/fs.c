@@ -438,6 +438,7 @@ bmap(struct inode *ip, uint bn)
           ip->addrs[l0_index_offset + NDIRECT + NINDIRECT_ADDR] = l1_base_addrs = balloc(ip->dev);
           bp = bread(ip->dev,l1_base_addrs);
           log_write(bp);
+          brelse(bp);
          }
          uint l1_index_offset = (bn - NDIRECT - NINDIRECT*NINDIRECT_ADDR - NDOUBLEINDIRECT*l0_index_offset)/NINDIRECT;
          bp = bread(ip->dev, l1_base_addrs + l1_index_offset);

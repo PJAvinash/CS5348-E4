@@ -21,7 +21,7 @@ struct superblock {
   uint bmapstart;    // Block number of first free map block
 };
 
-#define NDIRECT 12
+#define NDIRECT 11 // modified by JXP220032
 #define NINDIRECT (BSIZE / sizeof(uint))
 #define NINDIRECT_ADDR 1 // added by JXP220032 - number of indirect addresses
 #define NDOUBLEINDIRECT_ADDR 1 // added by JXP220032 - number of double indirect addresses
