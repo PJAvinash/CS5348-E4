@@ -407,9 +407,7 @@ bmap(struct inode *ip, uint bn)
 {
   uint addr;
   struct buf *bp;
-  uint level = 0;
   if(bn < NDIRECT){
-    level = 0;
     if((addr = ip->addrs[bn]) == 0){
       ip->addrs[bn] = addr = balloc(ip->dev);
     }  
